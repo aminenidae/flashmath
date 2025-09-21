@@ -3,8 +3,9 @@ const CACHE_NAME = 'flashmath-v1';
 const urlsToCache = [
   '/',
   '/index.html',
-  '/assets/index.css',
-  '/assets/index.js'
+  '/src/index.css',
+  '/src/main.jsx',
+  '/src/App.jsx'
 ];
 
 self.addEventListener('install', (event) => {
