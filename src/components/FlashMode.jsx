@@ -1,8 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
 import { saveProgress } from '../utils/firebaseUtils';
+import { useAuth } from '../contexts/AuthContext';
 import Progress from '../models/Progress';
 
-const FlashMode = ({ exercise, student, onExit }) => {
+const FlashMode = ({ exercise, onExit }) => {
+  const { studentData } = useAuth();
+  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [currentNumberIndex, setCurrentNumberIndex] = useState(-1);
   const [numbers, setNumbers] = useState([]);
   const [userAnswer, setUserAnswer] = useState('');
@@ -12,43 +15,44 @@ const FlashMode = ({ exercise, student, onExit }) => {
   const [sessionData, setSessionData] = useState([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [isFlashing, setIsFlashing] = useState(false);
   const intervalRef = useRef(null);
 
-  // Mock exercise data for demonstration
-  const mockExerciseData = {
-    id: '1',
-    level: 'Basic',
-    group: 'Addition Drill',
-    questions: [
-      { id: 1, numbers: [5, 7, 2, 9], correctAnswer: 23 },
-      { id: 2, numbers: [4, 3, 8, 1], correctAnswer: 16 },
-      { id: 3, numbers: [6, 2, 5, 3], correctAnswer: 16 },
-      { id: 4, numbers: [9, 1, 4, 7], correctAnswer: 21 },
-      { id: 5, numbers: [3, 8, 2, 6], correctAnswer: 19 }
-    ]
+  // Get current question from exercise
+  const getCurrentQuestion = () => {
+    if (!exercise || !exercise.questions || currentQuestionIndex >= exercise.questions.length) {
+      return null;
+    }
+    return exercise.questions[currentQuestionIndex];
   };
 
   useEffect(() => {
-    // Initialize with mock data
-    setNumbers(mockExerciseData.questions[0].numbers);
-    
-    // Start the flashing sequence after a short delay
-    const startTimer = setTimeout(() => {
-      startFlashing();
-    }, 1000);
-    
-    return () => {
-      clearTimeout(startTimer);
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-      }
-    };
-  }, []);
+    // Initialize with first question if available
+    const question = getCurrentQuestion();
+    if (question && question.numbers) {
+      setNumbers(question.numbers);
+
+      // Start the flashing sequence after a short delay
+      const startTimer = setTimeout(() => {
+        startFlashing();
+      }, 1000);
+
+      return () => {
+        clearTimeout(startTimer);
+        if (intervalRef.current) {
+          clearInterval(intervalRef.current);
+        }
+      };
+    }
+  }, [currentQuestionIndex, exercise]);
 
   const startFlashing = () => {
     let index = 0;
     setCurrentNumberIndex(0);
-    
+    setIsFlashing(true);
+
+    const flashSpeed = studentData?.flashSpeed || 1;
+
     intervalRef.current = setInterval(() => {
       index++;
       if (index < numbers.length) {
@@ -56,45 +60,54 @@ const FlashMode = ({ exercise, student, onExit }) => {
       } else {
         // Finished flashing all numbers
         clearInterval(intervalRef.current);
+        setIsFlashing(false);
+        setCurrentNumberIndex(-1);
         setTimeout(() => {
           // Focus on input field
           document.getElementById('answer-input')?.focus();
         }, 100);
       }
-    }, student.flashSpeed * 1000);
+    }, flashSpeed * 1000);
   };
 
   const handleAnswerSubmit = (e) => {
     e.preventDefault();
-    
-    const correctAnswer = mockExerciseData.questions[0].correctAnswer;
+
+    const question = getCurrentQuestion();
+    if (!question) return;
+
+    const correctAnswer = question.correctAnswer;
     const answerIsCorrect = parseInt(userAnswer) === correctAnswer;
-    
+
     setIsCorrect(answerIsCorrect);
     setShowFeedback(true);
-    
+
     // Store session data
     const progressModel = new Progress({
-      studentId: student.id,
+      studentId: studentData?.id || 'anonymous',
       level: exercise.level,
       exerciseGroup: exercise.group,
-      questionId: mockExerciseData.questions[0].id,
+      questionId: question.id,
       response: userAnswer,
       isCorrect: answerIsCorrect
     });
-    
+
     const progressData = progressModel.toFirestore();
-    
+
     setSessionData(prev => [...prev, progressData]);
-    
-    // Hide feedback after 2 seconds
+
+    // Hide feedback and move to next question
     setTimeout(() => {
       setShowFeedback(false);
       setUserAnswer('');
-      
+
       // Move to next question or end exercise
-      // For demo, we'll just show the save prompt
-      setShowSavePrompt(true);
+      if (currentQuestionIndex < exercise.questions.length - 1) {
+        setCurrentQuestionIndex(prev => prev + 1);
+      } else {
+        // Exercise complete, show save prompt
+        setShowSavePrompt(true);
+      }
     }, 2000);
   };
 
@@ -158,7 +171,7 @@ const FlashMode = ({ exercise, student, onExit }) => {
 
       {/* Main Content */}
       <div className="flex-grow flex flex-col items-center justify-center p-4">
-        {currentNumberIndex >= 0 && currentNumberIndex < numbers.length ? (
+        {isFlashing && currentNumberIndex >= 0 && currentNumberIndex < numbers.length ? (
           // Flashing number
           <div className="text-9xl font-bold animate-pulse">
             {numbers[currentNumberIndex]}
@@ -197,19 +210,28 @@ const FlashMode = ({ exercise, student, onExit }) => {
 
       {/* Progress indicator */}
       <div className="p-4 text-center">
-        <div className="inline-flex space-x-2">
-          {numbers.map((_, index) => (
-            <div
-              key={index}
-              className={`h-3 w-3 rounded-full ${
-                index < currentNumberIndex
-                  ? 'bg-green-400'
-                  : index === currentNumberIndex
-                  ? 'bg-yellow-400 animate-pulse'
-                  : 'bg-white bg-opacity-30'
-              }`}
-            ></div>
-          ))}
+        <div className="space-y-2">
+          {/* Number flash progress */}
+          {isFlashing && (
+            <div className="inline-flex space-x-2">
+              {numbers.map((_, index) => (
+                <div
+                  key={index}
+                  className={`h-3 w-3 rounded-full ${
+                    index < currentNumberIndex
+                      ? 'bg-green-400'
+                      : index === currentNumberIndex
+                      ? 'bg-yellow-400 animate-pulse'
+                      : 'bg-white bg-opacity-30'
+                  }`}
+                ></div>
+              ))}
+            </div>
+          )}
+          {/* Question progress */}
+          <div className="text-white text-sm">
+            Question {currentQuestionIndex + 1} of {exercise?.questions?.length || 0}
+          </div>
         </div>
       </div>
 

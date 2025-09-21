@@ -3,7 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import TeacherLogin from './TeacherLogin';
 import StudentLogin from './StudentLogin';
 
-const LoginPage = ({ setUser, setUserRole }) => {
+const LoginPage = () => {
   const [userType, setUserType] = useState(''); // 'teacher' or 'student'
   const navigate = useNavigate();
 
@@ -16,11 +16,11 @@ const LoginPage = ({ setUser, setUserRole }) => {
   };
 
   if (userType === 'teacher') {
-    return <TeacherLogin setUser={setUser} setUserRole={setUserRole} />;
+    return <TeacherLogin />;
   }
 
   if (userType === 'student') {
-    return <StudentLogin setUser={setUser} setUserRole={setUserRole} />;
+    return <StudentLogin />;
   }
 
   return (

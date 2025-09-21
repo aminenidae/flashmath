@@ -1,0 +1,36 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Helper function to check if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Helper function to check if user is a teacher
+    function isTeacher() {
+      return isAuthenticated() &&
+        firestore.exists(/databases/(default)/documents/users/$(request.auth.uid)) &&
+        firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role == 'teacher';
+    }
+
+    // CSV files storage
+    match /csv-files/{allPaths=**} {
+      // Only teachers can upload CSV files
+      allow read: if isTeacher();
+      allow write: if isTeacher() &&
+        request.resource.contentType == 'text/csv' &&
+        request.resource.size < 10 * 1024 * 1024; // Max 10MB
+      allow delete: if isTeacher();
+    }
+
+    // User uploads (future feature for avatars, etc.)
+    match /users/{userId}/{allPaths=**} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() &&
+        request.auth.uid == userId &&
+        request.resource.size < 5 * 1024 * 1024; // Max 5MB
+      allow delete: if isAuthenticated() &&
+        request.auth.uid == userId;
+    }
+  }
+}

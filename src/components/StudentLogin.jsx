@@ -1,14 +1,13 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { auth } from '../firebase';
-import { signInWithEmailAndPassword } from 'firebase/auth';
+import { useAuth } from '../contexts/AuthContext';
 
-const StudentLogin = ({ setUser, setUserRole }) => {
+const StudentLogin = () => {
   const [name, setName] = useState('');
-  const [id, setId] = useState('');
-  const [password, setPassword] = useState('');
+  const [classroom, setClassroom] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const { loginStudent } = useAuth();
   const navigate = useNavigate();
 
   const handleLogin = async (e) => {
@@ -17,26 +16,13 @@ const StudentLogin = ({ setUser, setUserRole }) => {
     setError('');
 
     try {
-      // In a real app, we would authenticate against our own student database
-      // For now, we'll simulate student login
-      
-      // Create a mock student object
-      const student = {
-        id: id || 'student-' + Date.now(),
-        name: name,
-        classroom: 'Basic', // This would come from the database in a real app
-        flashSpeed: 2,
-        responseTime: 10
-      };
-      
-      // Set user state
-      setUser(student);
-      setUserRole('student');
-      
+      // Login student with name and classroom
+      await loginStudent(name, classroom);
+
       // Navigate to student interface
       navigate('/student');
     } catch (err) {
-      setError('Failed to login. Please check your credentials.');
+      setError('Failed to login. Please check your details.');
       console.error('Login error:', err);
     } finally {
       setIsLoading(false);
@@ -74,30 +60,16 @@ const StudentLogin = ({ setUser, setUserRole }) => {
           </div>
 
           <div className="mb-6">
-            <label htmlFor="id" className="block text-gray-700 font-medium mb-2">
-              Student ID
+            <label htmlFor="classroom" className="block text-gray-700 font-medium mb-2">
+              Classroom
             </label>
             <input
-              id="id"
+              id="classroom"
               type="text"
-              value={id}
-              onChange={(e) => setId(e.target.value)}
+              value={classroom}
+              onChange={(e) => setClassroom(e.target.value)}
               className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-green-500 focus:border-transparent"
-              placeholder="Enter your student ID"
-            />
-          </div>
-
-          <div className="mb-6">
-            <label htmlFor="password" className="block text-gray-700 font-medium mb-2">
-              Password
-            </label>
-            <input
-              id="password"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-green-500 focus:border-transparent"
-              placeholder="Enter your password"
+              placeholder="Enter your classroom (e.g., Basic, Advanced)"
               required
             />
           </div>

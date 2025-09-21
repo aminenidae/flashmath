@@ -76,40 +76,101 @@ export const deleteStudent = async (id) => {
 };
 
 // Exercise operations
-export const createExercise = async (level, group, exerciseData) => {
+export const createExercise = async (exerciseData) => {
   try {
-    const exerciseRef = doc(collection(db, 'exercises', level, group));
-    await setDoc(exerciseRef, exerciseData);
-    return { id: exerciseRef.id, ...exerciseData };
+    // Split large exercises into chunks to avoid Firestore 1MB limit
+    const MAX_QUESTIONS_PER_DOC = 100; // Adjust based on question size
+    const { questions, ...exerciseInfo } = exerciseData;
+
+    if (!questions || questions.length === 0) {
+      throw new Error('Exercise must have questions');
+    }
+
+    const exerciseIds = [];
+
+    // Split questions into chunks
+    for (let i = 0; i < questions.length; i += MAX_QUESTIONS_PER_DOC) {
+      const questionChunk = questions.slice(i, i + MAX_QUESTIONS_PER_DOC);
+      const chunkNumber = Math.floor(i / MAX_QUESTIONS_PER_DOC) + 1;
+
+      const exerciseChunk = {
+        ...exerciseInfo,
+        questions: questionChunk,
+        chunkNumber,
+        totalChunks: Math.ceil(questions.length / MAX_QUESTIONS_PER_DOC),
+        totalQuestions: questions.length
+      };
+
+      const exerciseRef = doc(collection(db, 'exercises'));
+      await setDoc(exerciseRef, exerciseChunk);
+      exerciseIds.push(exerciseRef.id);
+    }
+
+    return { exerciseIds, totalChunks: exerciseIds.length };
   } catch (error) {
     console.error('Error creating exercise:', error);
     throw error;
   }
 };
 
+export const deleteAllExercises = async () => {
+  try {
+    const q = query(collection(db, 'exercises'));
+    const querySnapshot = await getDocs(q);
+
+    const deletePromises = querySnapshot.docs.map(doc =>
+      deleteDoc(doc.ref)
+    );
+
+    await Promise.all(deletePromises);
+    return querySnapshot.docs.length;
+  } catch (error) {
+    console.error('Error deleting exercises:', error);
+    throw error;
+  }
+};
+
 export const getExercisesByLevel = async (level) => {
   try {
-    const exercises = [];
-    const levelRef = collection(db, 'exercises', level);
-    
-    // Get all groups for this level
-    const groupSnapshot = await getDocs(levelRef);
-    
-    for (const groupDoc of groupSnapshot.docs) {
-      const groupRef = collection(db, 'exercises', level, groupDoc.id);
-      const exerciseSnapshot = await getDocs(groupRef);
-      
-      exerciseSnapshot.docs.forEach(exerciseDoc => {
-        exercises.push({
-          id: exerciseDoc.id,
-          group: groupDoc.id,
-          level,
-          ...exerciseDoc.data()
-        });
-      });
-    }
-    
-    return exercises;
+    // Query exercises collection with level filter
+    const q = query(
+      collection(db, 'exercises'),
+      where('level', '==', level)
+    );
+
+    const querySnapshot = await getDocs(q);
+    const exerciseChunks = querySnapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    }));
+
+    // Group chunks by exercise group and merge questions
+    const exerciseGroups = {};
+
+    exerciseChunks.forEach(chunk => {
+      const groupKey = `${chunk.group}`;
+
+      if (!exerciseGroups[groupKey]) {
+        exerciseGroups[groupKey] = {
+          id: groupKey,
+          level: chunk.level,
+          group: chunk.group,
+          questions: [],
+          totalQuestions: chunk.totalQuestions || chunk.questions?.length || 0
+        };
+      }
+
+      // Add questions from this chunk
+      if (chunk.questions) {
+        exerciseGroups[groupKey].questions.push(...chunk.questions);
+      }
+    });
+
+    // Convert to array and sort questions by ID
+    return Object.values(exerciseGroups).map(exercise => ({
+      ...exercise,
+      questions: exercise.questions.sort((a, b) => (a.id || 0) - (b.id || 0))
+    }));
   } catch (error) {
     console.error('Error fetching exercises:', error);
     throw error;

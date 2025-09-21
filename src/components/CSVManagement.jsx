@@ -63,11 +63,28 @@ const CSVManagement = () => {
         
         // Upload file and save metadata
         const csvData = await uploadCSVFile(file, metadata.toFirestore());
-        
+
         // Parse CSV and save exercises to Firestore
-        // This would be implemented in a real app
-        
-        console.log('Uploaded CSV:', csvData);
+        const fileText = await file.text();
+        const exercises = parseCSVToExercises(fileText, level);
+
+        // Clear existing exercises for this level to avoid duplicates
+        const { createExercise, deleteAllExercises } = await import('../utils/firebaseUtils');
+
+        if (exercises.length > 0) {
+          console.log('Clearing existing exercises...');
+          await deleteAllExercises();
+        }
+
+        // Save each exercise to Firestore
+        let totalChunks = 0;
+
+        for (const exercise of exercises) {
+          const result = await createExercise(exercise);
+          totalChunks += result.totalChunks;
+        }
+
+        console.log(`Uploaded CSV and created ${exercises.length} exercise groups (${totalChunks} documents):`, csvData);
       }
       
       // Clear uploaded files and refresh list

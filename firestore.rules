@@ -1,0 +1,67 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isTeacher() {
+      return isAuthenticated() &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'teacher';
+    }
+
+    function isStudent() {
+      return isAuthenticated() &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'student';
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // Users collection (roles and metadata)
+    match /users/{userId} {
+      allow read: if isOwner(userId);
+      allow create: if isAuthenticated() && isOwner(userId);
+      allow update: if isOwner(userId);
+      allow delete: if false; // Never allow deletion
+    }
+
+    // Students collection
+    match /students/{studentId} {
+      allow read: if isTeacher() || isOwner(studentId);
+      allow create: if isTeacher() || (isAuthenticated() && isOwner(studentId));
+      allow update: if isTeacher() || isOwner(studentId);
+      allow delete: if isTeacher();
+    }
+
+    // Exercises collection
+    match /exercises/{exerciseId} {
+      allow read: if isAuthenticated();
+      allow create: if isTeacher();
+      allow update: if isTeacher();
+      allow delete: if isTeacher();
+    }
+
+    // Progress collection (student responses)
+    match /progress/{progressId} {
+      allow read: if isTeacher() ||
+        (isStudent() && resource.data.studentId == request.auth.uid);
+      allow create: if isStudent() &&
+        request.resource.data.studentId == request.auth.uid;
+      allow update: if false; // Progress records are immutable
+      allow delete: if isTeacher();
+    }
+
+    // CSV Files metadata collection
+    match /csvFiles/{fileId} {
+      allow read: if isTeacher();
+      allow create: if isTeacher();
+      allow update: if isTeacher();
+      allow delete: if isTeacher();
+    }
+  }
+}

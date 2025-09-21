@@ -1,34 +1,39 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { auth } from '../firebase';
-import { signInWithEmailAndPassword } from 'firebase/auth';
+import { useAuth } from '../contexts/AuthContext';
 
-const TeacherLogin = ({ setUser, setUserRole }) => {
+const TeacherLogin = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isSignUp, setIsSignUp] = useState(false);
+  const { loginTeacher, signupTeacher } = useAuth();
   const navigate = useNavigate();
 
-  const handleLogin = async (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setIsLoading(true);
     setError('');
 
     try {
-      // Sign in with email and password
-      const userCredential = await signInWithEmailAndPassword(auth, email, password);
-      const user = userCredential.user;
-      
-      // Set user state
-      setUser(user);
-      setUserRole('teacher');
-      
+      if (isSignUp) {
+        // Sign up new teacher
+        await signupTeacher(email, password);
+      } else {
+        // Login existing teacher
+        await loginTeacher(email, password);
+      }
+
       // Navigate to teacher dashboard
       navigate('/teacher');
     } catch (err) {
-      setError('Failed to login. Please check your credentials.');
-      console.error('Login error:', err);
+      if (isSignUp) {
+        setError('Failed to create account. ' + (err.message || 'Please try again.'));
+      } else {
+        setError('Failed to login. Please check your credentials.');
+      }
+      console.error('Auth error:', err);
     } finally {
       setIsLoading(false);
     }
@@ -38,8 +43,12 @@ const TeacherLogin = ({ setUser, setUserRole }) => {
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-500 to-indigo-600 p-4">
       <div className="bg-white rounded-2xl shadow-xl p-8 w-full max-w-md">
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-gray-800">Teacher Login</h1>
-          <p className="text-gray-600 mt-2">Access the teacher dashboard</p>
+          <h1 className="text-3xl font-bold text-gray-800">
+            {isSignUp ? 'Teacher Sign Up' : 'Teacher Login'}
+          </h1>
+          <p className="text-gray-600 mt-2">
+            {isSignUp ? 'Create your teacher account' : 'Access the teacher dashboard'}
+          </p>
         </div>
 
         {error && (
@@ -48,7 +57,7 @@ const TeacherLogin = ({ setUser, setUserRole }) => {
           </div>
         )}
 
-        <form onSubmit={handleLogin}>
+        <form onSubmit={handleSubmit}>
           <div className="mb-6">
             <label htmlFor="email" className="block text-gray-700 font-medium mb-2">
               Email Address
@@ -84,9 +93,18 @@ const TeacherLogin = ({ setUser, setUserRole }) => {
             disabled={isLoading}
             className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg transition duration-300 ease-in-out transform hover:scale-105 disabled:opacity-50"
           >
-            {isLoading ? 'Logging in...' : 'Login as Teacher'}
+            {isLoading ? (isSignUp ? 'Creating Account...' : 'Logging in...') : (isSignUp ? 'Create Teacher Account' : 'Login as Teacher')}
           </button>
         </form>
+
+        <div className="mt-6 text-center">
+          <button
+            onClick={() => setIsSignUp(!isSignUp)}
+            className="text-blue-600 hover:text-blue-800 font-medium"
+          >
+            {isSignUp ? 'Already have an account? Login' : "Don't have an account? Sign Up"}
+          </button>
+        </div>
 
         <div className="mt-8 text-center">
           <button 

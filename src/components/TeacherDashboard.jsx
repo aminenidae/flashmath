@@ -1,23 +1,22 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
 import StudentManagement from './StudentManagement';
 import CSVManagement from './CSVManagement';
 import ProgressTracking from './ProgressTracking';
 
-const TeacherDashboard = ({ user }) => {
+const TeacherDashboard = () => {
   const [activeTab, setActiveTab] = useState('students');
+  const { currentUser, logout } = useAuth();
   const navigate = useNavigate();
 
-  useEffect(() => {
-    // Check if user is authenticated
-    if (!user) {
+  const handleLogout = async () => {
+    try {
+      await logout();
       navigate('/');
+    } catch (error) {
+      console.error('Logout error:', error);
     }
-  }, [user, navigate]);
-
-  const handleLogout = () => {
-    // In a real app, we would sign out from Firebase
-    navigate('/');
   };
 
   return (
