@@ -61,21 +61,47 @@ export const AuthProvider = ({ children }) => {
       const email = `${name.toLowerCase().replace(/\s+/g, '')}@student.flashmath`;
       const password = `${classroom}-${name}`;
 
+      console.log('Attempting student login:', { email, classroom, name });
+
       try {
         // Try to sign in existing student
+        console.log('Trying to sign in existing student...');
         const userCredential = await signInWithEmailAndPassword(auth, email, password);
+        console.log('Successfully signed in existing student:', userCredential.user.uid);
 
         // Get student data from Firestore
         const studentDoc = await getDoc(doc(db, 'students', userCredential.user.uid));
+        console.log('Student doc exists:', studentDoc.exists());
         if (studentDoc.exists()) {
-          setStudentData(studentDoc.data());
+          const studentInfo = studentDoc.data();
+          console.log('Found existing student data:', studentInfo);
+          setStudentData(studentInfo);
+          setUserRole('student');
+          return userCredential.user;
+        } else {
+          // Student user exists but student document is missing - create it
+          console.log('Student user exists but document missing, creating student document...');
+          const studentInfo = {
+            name,
+            classroom,
+            flashSpeed: 1,
+            responseTime: 30,
+            createdAt: new Date()
+          };
+
+          await setDoc(doc(db, 'students', userCredential.user.uid), studentInfo);
+          console.log('Student document created for existing user');
+          setStudentData(studentInfo);
           setUserRole('student');
           return userCredential.user;
         }
       } catch (signInError) {
+        console.log('Sign in error:', signInError.code, signInError.message);
         // If student doesn't exist, create new account
         if (signInError.code === 'auth/user-not-found' || signInError.code === 'auth/invalid-credential') {
+          console.log('Creating new student account...');
           const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+          console.log('Created new student account:', userCredential.user.uid);
 
           // Create student document in Firestore
           const studentInfo = {
@@ -86,12 +112,14 @@ export const AuthProvider = ({ children }) => {
             createdAt: new Date()
           };
 
+          console.log('Creating student document:', studentInfo);
           await setDoc(doc(db, 'students', userCredential.user.uid), studentInfo);
           await setDoc(doc(db, 'users', userCredential.user.uid), {
             role: 'student',
             studentId: userCredential.user.uid
           });
 
+          console.log('Student documents created successfully');
           setStudentData(studentInfo);
           setUserRole('student');
           return userCredential.user;
@@ -100,6 +128,7 @@ export const AuthProvider = ({ children }) => {
         }
       }
     } catch (error) {
+      console.error('Student login error:', error);
       setError(error.message);
       throw error;
     }
@@ -142,22 +171,40 @@ export const AuthProvider = ({ children }) => {
   // Listen for auth state changes
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      console.log('Auth state changed:', user?.uid);
       if (user) {
         setCurrentUser(user);
 
-        // Get user role from Firestore
-        const userDoc = await getDoc(doc(db, 'users', user.uid));
-        if (userDoc.exists()) {
-          const userData = userDoc.data();
-          setUserRole(userData.role);
+        try {
+          // Get user role from Firestore
+          const userDoc = await getDoc(doc(db, 'users', user.uid));
+          console.log('User doc exists:', userDoc.exists());
+          if (userDoc.exists()) {
+            const userData = userDoc.data();
+            console.log('User data:', userData);
+            setUserRole(userData.role);
 
-          // If student, get student data
-          if (userData.role === 'student') {
-            const studentDoc = await getDoc(doc(db, 'students', user.uid));
-            if (studentDoc.exists()) {
-              setStudentData(studentDoc.data());
+            // If student, get student data
+            if (userData.role === 'student') {
+              console.log('Fetching student data for:', user.uid);
+              const studentDoc = await getDoc(doc(db, 'students', user.uid));
+              console.log('Student doc exists:', studentDoc.exists());
+              if (studentDoc.exists()) {
+                const studentInfo = studentDoc.data();
+                console.log('Student data:', studentInfo);
+                setStudentData(studentInfo);
+              } else {
+                console.error('Student document not found for user:', user.uid);
+                // Student role exists but document missing - this shouldn't happen in normal flow
+                // but we'll handle it gracefully by setting studentData to null
+                setStudentData(null);
+              }
             }
+          } else {
+            console.error('User document not found for:', user.uid);
           }
+        } catch (error) {
+          console.error('Error fetching user/student data:', error);
         }
       } else {
         setCurrentUser(null);
